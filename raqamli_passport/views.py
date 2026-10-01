@@ -205,8 +205,7 @@ class PassportCallbackAPIView(APIView):
 class PassportWebhookAPIView(APIView):
     """
     Passport serveridan avtomatik o'zgarishlarni qabul qiluvchi Webhook endpoint.
-    Foydalanuvchi ma'lumotlari o'zgarganda (event='user.updated') bazadagi foydalanuvchini
-    avtomatik yangilaydi.
+    Foydalanuvchi ma'lumotlari o'zgarganda bazadagi foydalanuvchini avtomatik yangilaydi.
     """
     permission_classes = [AllowAny]
 
@@ -238,32 +237,21 @@ class PassportWebhookAPIView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        event = request.headers.get("X-SSO-Event") or request.META.get("HTTP_X_SSO_EVENT")
         payload = request.data if isinstance(request.data, dict) else {}
-        if not event:
-            event = payload.get("event")
-
-        if event == "user.updated":
-            user_data = payload.get("user")
-            if not user_data or not isinstance(user_data, dict):
-                return Response(
-                    {"error": "Foydalanuvchi ma'lumotlari ('user') topilmadi."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            user = self.sync_user(user_data)
+        user_data = payload.get("user") or payload
+        if not user_data or not isinstance(user_data, dict):
             return Response(
-                {
-                    "status": "success",
-                    "event": event,
-                    "user_id": getattr(user, "id", None),
-                    "message": "Foydalanuvchi muvaffaqiyatli sinxronlashtirildi.",
-                },
-                status=status.HTTP_200_OK,
+                {"error": "Foydalanuvchi ma'lumotlari topilmadi."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
+        user = self.sync_user(user_data)
         return Response(
-            {"status": "ignored", "event": event, "message": "Ushbu hodisa e'tiborga olinmadi."},
+            {
+                "status": "success",
+                "user_id": getattr(user, "id", None),
+                "message": "Foydalanuvchi muvaffaqiyatli sinxronlashtirildi.",
+            },
             status=status.HTTP_200_OK,
         )
 

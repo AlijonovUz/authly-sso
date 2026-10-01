@@ -96,7 +96,7 @@ Bu orqali loyihangizda 3 ta tayyor endpoint faollashadi:
 
 ### 🔄 Avtomatik Sinxronizatsiya (Webhook)
 
-Passport SSO foydalanuvchi ma'lumotlari o'zgarganda barcha ulangan ilovalarga avtomatik tarzda `user.updated` hodisasini yuboradi.
+Passport SSO foydalanuvchi ma'lumotlari o'zgarganda ulangan ilovalarning webhook manziliga yangilangan ma'lumotlarni yuboradi.
 
 SDK ushbu webhook so'rovini qabul qilib:
 1. `X-SSO-Signature` (HMAC SHA-256) orqali so'rov haqiqiyligini tekshiradi.
