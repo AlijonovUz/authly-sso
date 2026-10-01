@@ -17,3 +17,8 @@ class PassportProfileFetchError(PassportSDKError):
         super().__init__(message)
         self.status_code = status_code
         self.details = details
+
+
+class PassportWebhookSignatureError(PassportSDKError):
+    """Webhook imzosini tekshirishda xatolik yuz berganda."""
+    pass

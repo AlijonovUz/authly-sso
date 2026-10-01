@@ -1,7 +1,31 @@
+import hashlib
+import hmac
 import requests
 from urllib.parse import urlencode
-from typing import Dict, Any
-from .exceptions import PassportTokenExchangeError, PassportProfileFetchError
+from typing import Dict, Any, Optional
+from .exceptions import (
+    PassportTokenExchangeError,
+    PassportProfileFetchError,
+    PassportWebhookSignatureError,
+)
+
+
+def calculate_signature(secret: str, payload_bytes: bytes) -> str:
+    """HMAC-SHA256 yordamida payload imzosini hisoblaydi."""
+    digest = hmac.new(
+        key=secret.encode("utf-8"),
+        msg=payload_bytes,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    return f"sha256={digest}"
+
+
+def verify_webhook_signature(secret: str, payload_bytes: bytes, signature: str) -> bool:
+    """Webhook so'rovidan kelgan imzoni tekshiradi."""
+    if not secret or not signature:
+        return False
+    expected = calculate_signature(secret, payload_bytes)
+    return hmac.compare_digest(expected, signature)
 
 
 class PassportClient:
@@ -12,12 +36,13 @@ class PassportClient:
         client_secret: str,
         redirect_uri: str,
         timeout: int = 10,
+        webhook_secret: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-        self.timeout = timeout
+        self.webhook_secret = webhook_secret
 
     def get_authorization_url(self, scope: str = "read", state: str = None) -> str:
         """Foydalanuvchini Passport frontendiga yo'naltiruvchi havola yasaydi."""
@@ -75,3 +100,10 @@ class PassportClient:
         token_data = self.exchange_code_for_token(code)
         access_token = token_data.get("access_token")
         return self.get_user_profile(access_token)
+
+    def verify_webhook_signature(
+        self, payload_bytes: bytes, signature: str, secret: Optional[str] = None
+    ) -> bool:
+        """Kelgan webhook so'rovining imzosini tekshiradi."""
+        target_secret = secret or self.webhook_secret
+        return verify_webhook_signature(target_secret, payload_bytes, signature)
