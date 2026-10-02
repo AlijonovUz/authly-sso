@@ -15,6 +15,7 @@ from .services import (
     populate_user_fields,
     find_or_create_user,
     generate_user_jwt_tokens,
+    extract_user_payload,
 )
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "populate_user_fields",
     "find_or_create_user",
     "generate_user_jwt_tokens",
+    "extract_user_payload",
     "PassportSDKError",
     "PassportTokenExchangeError",
     "PassportProfileFetchError",

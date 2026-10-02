@@ -46,7 +46,10 @@ def _error(detail: str, details: dict = None, http_status: int = 400) -> Respons
     """
     payload = {"detail": detail}
     if details:
-        payload.update(details)
+        if isinstance(details, dict):
+            payload.update(details)
+        else:
+            payload["info"] = str(details)
     return Response(payload, status=http_status)
 
 
