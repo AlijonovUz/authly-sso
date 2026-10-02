@@ -123,11 +123,15 @@ class PassportCallbackAPIView(APIView):
         return find_or_create_user(self.get_user_model(), user_data)
 
     def get_response_data(
-        self, user, user_data: dict, created: bool, tokens: dict
+        self, user, user_data: dict, created: bool, tokens: dict, passport_access_token: str = None
     ) -> dict:
-        """Muvaffaqiyatli callback uchun javob strukturasini qaytaradi."""
+        """
+        Muvaffaqiyatli callback uchun javob strukturasini qaytaradi.
+        passport_access_token — frontend sinxronizatsiya uchun saqlashi kerak bo'lgan
+        Passport OAuth tokeni. Bu lokal JWT emas — Passport serveriga murojaat uchun.
+        """
         clean_data = extract_user_payload(user_data)
-        return {
+        data = {
             "is_new_user": created,
             "user": {
                 "id": user.id,
@@ -148,6 +152,9 @@ class PassportCallbackAPIView(APIView):
             },
             **tokens,
         }
+        if passport_access_token:
+            data["passport_access_token"] = passport_access_token
+        return data
 
     def generate_tokens(self, user) -> dict:
         """Foydalanuvchi uchun JWT tokenlarini generatsiya qiladi."""
@@ -197,7 +204,7 @@ class PassportCallbackAPIView(APIView):
             )
 
         try:
-            user_data = client.authenticate_code(
+            user_data, passport_access_token = client.authenticate_code(
                 code, code_verifier=code_verifier, redirect_uri=final_redirect_uri
             )
         except PassportSDKError as exc:
@@ -249,7 +256,7 @@ class PassportCallbackAPIView(APIView):
             )
 
         return Response(
-            self.get_response_data(user, user_data, created, tokens),
+            self.get_response_data(user, user_data, created, tokens, passport_access_token),
             status=status.HTTP_200_OK,
         )
 

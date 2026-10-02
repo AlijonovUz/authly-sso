@@ -142,12 +142,16 @@ class PassportClient:
         code_verifier: Optional[str] = None,
         redirect_uri: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Kodni berib, darhol oxirgi foydalanuvchi ma'lumotlarini olib beruvchi qulay metod."""
+        """
+        Kodni berib, foydalanuvchi profili va Passport access_token ni qaytaruvchi metod.
+        Qaytaradi: (profile_dict, access_token_str)
+        """
         token_data = self.exchange_code_for_token(
             code, code_verifier=code_verifier, redirect_uri=redirect_uri
         )
         access_token = token_data.get("access_token")
-        return self.get_user_profile(access_token)
+        profile = self.get_user_profile(access_token)
+        return profile, access_token
 
     def verify_webhook_signature(
         self, payload_bytes: bytes, signature: str, secret: Optional[str] = None
