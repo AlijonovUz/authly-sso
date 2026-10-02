@@ -12,10 +12,7 @@ User = get_user_model()
 
 
 def get_passport_client() -> PassportClient:
-    backend_url = (
-        getattr(settings, "PASSPORT_BACKEND_URL", None)
-        or getattr(settings, "PASSPORT_BASE_URL", "")
-    )
+    backend_url = getattr(settings, "PASSPORT_BACKEND_URL", "")
     frontend_url = getattr(settings, "PASSPORT_FRONTEND_URL", None) or backend_url
 
     return PassportClient(
@@ -140,7 +137,8 @@ class PassportAuthorizeURLAPIView(APIView):
         client = get_passport_client()
         scope = request.GET.get("scope", "read")
         state = request.GET.get("state")
-        url = client.get_authorization_url(scope=scope, state=state)
+        redirect_uri = request.GET.get("redirect_uri")
+        url = client.get_authorization_url(scope=scope, state=state, redirect_uri=redirect_uri)
         return Response({"url": url}, status=status.HTTP_200_OK)
 
 
@@ -180,11 +178,14 @@ class PassportCallbackAPIView(APIView):
     def handle_callback(self, request):
         code = request.GET.get("code")
         code_verifier = request.GET.get("code_verifier")
+        redirect_uri = request.GET.get("redirect_uri")
         if hasattr(request, "data") and isinstance(request.data, dict):
             if not code:
                 code = request.data.get("code")
             if not code_verifier:
                 code_verifier = request.data.get("code_verifier")
+            if not redirect_uri:
+                redirect_uri = request.data.get("redirect_uri")
 
         if not code:
             return Response(
@@ -195,7 +196,9 @@ class PassportCallbackAPIView(APIView):
         client = get_passport_client()
 
         try:
-            user_data = client.authenticate_code(code, code_verifier=code_verifier)
+            user_data = client.authenticate_code(
+                code, code_verifier=code_verifier, redirect_uri=redirect_uri
+            )
         except PassportSDKError as e:
             return Response(
                 {"error": str(e), "details": getattr(e, "details", None)},

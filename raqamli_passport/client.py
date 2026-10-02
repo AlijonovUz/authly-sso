@@ -38,38 +38,40 @@ class PassportClient:
         redirect_uri: str = "",
         timeout: int = 10,
         webhook_secret: Optional[str] = None,
-        base_url: Optional[str] = None,
     ):
-        clean_backend = (backend_url or base_url or "").rstrip("/")
+        clean_backend = (backend_url or "").rstrip("/")
         clean_frontend = (frontend_url or clean_backend).rstrip("/")
 
         self.backend_url = clean_backend
         self.frontend_url = clean_frontend
-        self.base_url = clean_backend
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.timeout = timeout
         self.webhook_secret = webhook_secret
 
-    def get_authorization_url(self, scope: str = "read", state: Optional[str] = None) -> str:
+    def get_authorization_url(
+        self, scope: str = "read", state: Optional[str] = None, redirect_uri: Optional[str] = None
+    ) -> str:
         """Foydalanuvchini Passport frontendiga yo'naltiruvchi havola yasaydi."""
         params = {
             "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri or self.redirect_uri,
             "scope": scope,
         }
         if state:
             params["state"] = state
         return f"{self.frontend_url}/login?{urlencode(params)}"
 
-    def exchange_code_for_token(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+    def exchange_code_for_token(
+        self, code: str, code_verifier: Optional[str] = None, redirect_uri: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Bir martalik kodni 'access_token'ga almashtiradi."""
         token_endpoint = f"{self.backend_url}/oauth/token/"
         payload = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri or self.redirect_uri,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
@@ -105,9 +107,11 @@ class PassportClient:
         except requests.RequestException as e:
             raise PassportProfileFetchError(f"Passport serveriga bog'lanishda xatolik: {str(e)}")
 
-    def authenticate_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+    def authenticate_code(
+        self, code: str, code_verifier: Optional[str] = None, redirect_uri: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Kodni berib, darhol oxirgi foydalanuvchi ma'lumotlarini olib beruvchi qulay metod."""
-        token_data = self.exchange_code_for_token(code, code_verifier=code_verifier)
+        token_data = self.exchange_code_for_token(code, code_verifier=code_verifier, redirect_uri=redirect_uri)
         access_token = token_data.get("access_token")
         return self.get_user_profile(access_token)
 
