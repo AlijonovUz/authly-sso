@@ -179,8 +179,12 @@ class PassportCallbackAPIView(APIView):
 
     def handle_callback(self, request):
         code = request.GET.get("code")
-        if not code and hasattr(request, "data") and isinstance(request.data, dict):
-            code = request.data.get("code")
+        code_verifier = request.GET.get("code_verifier")
+        if hasattr(request, "data") and isinstance(request.data, dict):
+            if not code:
+                code = request.data.get("code")
+            if not code_verifier:
+                code_verifier = request.data.get("code_verifier")
 
         if not code:
             return Response(
@@ -191,7 +195,7 @@ class PassportCallbackAPIView(APIView):
         client = get_passport_client()
 
         try:
-            user_data = client.authenticate_code(code)
+            user_data = client.authenticate_code(code, code_verifier=code_verifier)
         except PassportSDKError as e:
             return Response(
                 {"error": str(e), "details": getattr(e, "details", None)},

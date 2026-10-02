@@ -63,7 +63,7 @@ class PassportClient:
             params["state"] = state
         return f"{self.frontend_url}/login?{urlencode(params)}"
 
-    def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+    def exchange_code_for_token(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
         """Bir martalik kodni 'access_token'ga almashtiradi."""
         token_endpoint = f"{self.backend_url}/oauth/token/"
         payload = {
@@ -73,6 +73,8 @@ class PassportClient:
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
+        if code_verifier:
+            payload["code_verifier"] = code_verifier
 
         try:
             response = requests.post(token_endpoint, data=payload, timeout=self.timeout)
@@ -103,9 +105,9 @@ class PassportClient:
         except requests.RequestException as e:
             raise PassportProfileFetchError(f"Passport serveriga bog'lanishda xatolik: {str(e)}")
 
-    def authenticate_code(self, code: str) -> Dict[str, Any]:
+    def authenticate_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
         """Kodni berib, darhol oxirgi foydalanuvchi ma'lumotlarini olib beruvchi qulay metod."""
-        token_data = self.exchange_code_for_token(code)
+        token_data = self.exchange_code_for_token(code, code_verifier=code_verifier)
         access_token = token_data.get("access_token")
         return self.get_user_profile(access_token)
 
