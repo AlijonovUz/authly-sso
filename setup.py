@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="raqamli-passport-sdk",
-    version="0.2.6",
+    version="0.2.7",
     description="Raqamli Nazorat LLC loyihalari uchun yagona SSO Passport SDK",
     long_description=long_description,
     long_description_content_type="text/markdown",

@@ -1,4 +1,5 @@
 from typing import Tuple, List, Dict, Any, Optional
+
 try:
     from django.conf import settings
 except ImportError:
