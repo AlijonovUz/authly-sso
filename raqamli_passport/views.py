@@ -389,13 +389,36 @@ class PassportSyncProfileAPIView(APIView):
         return updated_fields
 
     def get_response_data(self, user, user_data: dict) -> dict:
-        """Sinxronizatsiya natijasidagi foydalanuvchi ma'lumotlarini qaytaradi."""
+        """
+        Sinxronizatsiya natijasidagi foydalanuvchi ma'lumotlarini qaytaradi.
+        region_info va district_info lokal modeldan olinadi, bo'lmasa Passport
+        payloadidagi xom ma'lumot qaytariladi.
+        """
         clean_data = extract_user_payload(user_data)
+
+        region = getattr(user, "region", None)
+        if region is not None:
+            region_info = {
+                "id": getattr(region, "id", None),
+                "name": getattr(region, "name", None),
+            }
+        else:
+            region_info = clean_data.get("region")
+
+        district = getattr(user, "district", None)
+        if district is not None:
+            district_info = {
+                "id": getattr(district, "id", None),
+                "name": getattr(district, "name", None),
+            }
+        else:
+            district_info = clean_data.get("district")
+
         return {
             "id": user.id,
             "passport_id": clean_data.get("passport_id") or getattr(user, "passport_id", None),
-            "username": getattr(user, "username", ""),
-            "full_name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip(),
+            "first_name": getattr(user, "first_name", ""),
+            "last_name": getattr(user, "last_name", ""),
             "email": getattr(user, "email", ""),
             "phone": (
                 getattr(user, "phone_number", None)
@@ -406,6 +429,8 @@ class PassportSyncProfileAPIView(APIView):
             "birth_date": (
                 getattr(user, "birth_date", None) or clean_data.get("birth_date", None)
             ),
+            "region_info": region_info,
+            "district_info": district_info,
         }
 
     def handle_sync(self, request):
