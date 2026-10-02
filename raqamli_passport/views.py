@@ -40,10 +40,16 @@ class PassportAuthorizeURLAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        url = client.get_authorization_url(
-            scope=scope, state=state, redirect_uri=final_redirect_uri
-        )
-        return Response({"url": url}, status=status.HTTP_200_OK)
+        try:
+            url = client.get_authorization_url(
+                scope=scope, state=state, redirect_uri=final_redirect_uri
+            )
+            return Response({"url": url}, status=status.HTTP_200_OK)
+        except PassportSDKError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class PassportCallbackAPIView(APIView):
