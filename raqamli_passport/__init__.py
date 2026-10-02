@@ -9,9 +9,21 @@ from .exceptions import (
     PassportProfileFetchError,
     PassportWebhookSignatureError,
 )
+from .services import (
+    PassportService,
+    get_passport_client,
+    populate_user_fields,
+    find_or_create_user,
+    generate_user_jwt_tokens,
+)
 
 __all__ = [
     "PassportClient",
+    "PassportService",
+    "get_passport_client",
+    "populate_user_fields",
+    "find_or_create_user",
+    "generate_user_jwt_tokens",
     "PassportSDKError",
     "PassportTokenExchangeError",
     "PassportProfileFetchError",

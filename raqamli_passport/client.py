@@ -4,6 +4,7 @@ import requests
 from urllib.parse import urlencode
 from typing import Dict, Any, Optional
 from .exceptions import (
+    PassportSDKError,
     PassportTokenExchangeError,
     PassportProfileFetchError,
     PassportWebhookSignatureError,
@@ -51,12 +52,20 @@ class PassportClient:
         self.webhook_secret = webhook_secret
 
     def get_authorization_url(
-        self, scope: str = "read", state: Optional[str] = None, redirect_uri: Optional[str] = None
+        self,
+        scope: str = "read",
+        state: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
     ) -> str:
         """Foydalanuvchini Passport frontendiga yo'naltiruvchi havola yasaydi."""
+        target_redirect_uri = redirect_uri or self.redirect_uri
+        if not target_redirect_uri:
+            raise PassportSDKError(
+                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki mijoz sozlamalarida 'redirect_uri' ni belgilang."
+            )
         params = {
             "client_id": self.client_id,
-            "redirect_uri": redirect_uri or self.redirect_uri,
+            "redirect_uri": target_redirect_uri,
             "scope": scope,
         }
         if state:
@@ -64,14 +73,22 @@ class PassportClient:
         return f"{self.frontend_url}/login?{urlencode(params)}"
 
     def exchange_code_for_token(
-        self, code: str, code_verifier: Optional[str] = None, redirect_uri: Optional[str] = None
+        self,
+        code: str,
+        code_verifier: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Bir martalik kodni 'access_token'ga almashtiradi."""
+        target_redirect_uri = redirect_uri or self.redirect_uri
+        if not target_redirect_uri:
+            raise PassportTokenExchangeError(
+                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki mijoz sozlamalarida 'redirect_uri' ni belgilang."
+            )
         token_endpoint = f"{self.backend_url}/oauth/token/"
         payload = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": redirect_uri or self.redirect_uri,
+            "redirect_uri": target_redirect_uri,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
@@ -88,7 +105,9 @@ class PassportClient:
                 )
             return response.json()
         except requests.RequestException as e:
-            raise PassportTokenExchangeError(f"Passport serveriga bog'lanishda xatolik: {str(e)}")
+            raise PassportTokenExchangeError(
+                f"Passport serveriga bog'lanishda xatolik: {str(e)}"
+            )
 
     def get_user_profile(self, access_token: str) -> Dict[str, Any]:
         """OAuth access_token orqali foydalanuvchi ma'lumotlarini qaytaradi."""
@@ -96,7 +115,9 @@ class PassportClient:
         headers = {"Authorization": f"Bearer {access_token}"}
 
         try:
-            response = requests.get(profile_endpoint, headers=headers, timeout=self.timeout)
+            response = requests.get(
+                profile_endpoint, headers=headers, timeout=self.timeout
+            )
             if response.status_code != 200:
                 raise PassportProfileFetchError(
                     message="Profil ma'lumotlarini olish imkoni bo'lmadi",
@@ -105,13 +126,20 @@ class PassportClient:
                 )
             return response.json()
         except requests.RequestException as e:
-            raise PassportProfileFetchError(f"Passport serveriga bog'lanishda xatolik: {str(e)}")
+            raise PassportProfileFetchError(
+                f"Passport serveriga bog'lanishda xatolik: {str(e)}"
+            )
 
     def authenticate_code(
-        self, code: str, code_verifier: Optional[str] = None, redirect_uri: Optional[str] = None
+        self,
+        code: str,
+        code_verifier: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Kodni berib, darhol oxirgi foydalanuvchi ma'lumotlarini olib beruvchi qulay metod."""
-        token_data = self.exchange_code_for_token(code, code_verifier=code_verifier, redirect_uri=redirect_uri)
+        token_data = self.exchange_code_for_token(
+            code, code_verifier=code_verifier, redirect_uri=redirect_uri
+        )
         access_token = token_data.get("access_token")
         return self.get_user_profile(access_token)
 
