@@ -31,21 +31,28 @@ def verify_webhook_signature(secret: str, payload_bytes: bytes, signature: str) 
 class PassportClient:
     def __init__(
         self,
-        base_url: str,
-        client_id: str,
-        client_secret: str,
-        redirect_uri: str,
+        backend_url: Optional[str] = None,
+        frontend_url: Optional[str] = None,
+        client_id: str = "",
+        client_secret: str = "",
+        redirect_uri: str = "",
         timeout: int = 10,
         webhook_secret: Optional[str] = None,
+        base_url: Optional[str] = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        clean_backend = (backend_url or base_url or "").rstrip("/")
+        clean_frontend = (frontend_url or clean_backend).rstrip("/")
+
+        self.backend_url = clean_backend
+        self.frontend_url = clean_frontend
+        self.base_url = clean_backend
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.timeout = timeout
         self.webhook_secret = webhook_secret
 
-    def get_authorization_url(self, scope: str = "read", state: str = None) -> str:
+    def get_authorization_url(self, scope: str = "read", state: Optional[str] = None) -> str:
         """Foydalanuvchini Passport frontendiga yo'naltiruvchi havola yasaydi."""
         params = {
             "client_id": self.client_id,
@@ -54,11 +61,11 @@ class PassportClient:
         }
         if state:
             params["state"] = state
-        return f"{self.base_url}/login?{urlencode(params)}"
+        return f"{self.frontend_url}/login?{urlencode(params)}"
 
     def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
         """Bir martalik kodni 'access_token'ga almashtiradi."""
-        token_endpoint = f"{self.base_url}/oauth/token/"
+        token_endpoint = f"{self.backend_url}/oauth/token/"
         payload = {
             "grant_type": "authorization_code",
             "code": code,
@@ -81,7 +88,7 @@ class PassportClient:
 
     def get_user_profile(self, access_token: str) -> Dict[str, Any]:
         """OAuth access_token orqali foydalanuvchi ma'lumotlarini qaytaradi."""
-        profile_endpoint = f"{self.base_url}/api/v1/sso/profile/"
+        profile_endpoint = f"{self.backend_url}/api/v1/sso/profile/"
         headers = {"Authorization": f"Bearer {access_token}"}
 
         try:

@@ -13,16 +13,19 @@ Kutubxona OAuth2 Authorization Code oqimi orqali foydalanuvchilarni autentifikat
 ## 🚀 Asosiy imkoniyatlar
 
 - **Framework-agnostic**: Istalgan Python framework (FastAPI, Flask, aiohttp) yoki oddiy scriptlar bilan ishlaydigan `PassportClient`.
+- **Backend va Frontend domenlari ajratilgan**:
+  - `PASSPORT_BACKEND_URL`: Token olish, profil yuklash va barcha server-to-server API so'rovlari uchun.
+  - `PASSPORT_FRONTEND_URL`: Foydalanuvchini brauzerda SSO login sahifasiga yo'naltirish havolasini yasash uchun.
 - **Django & DRF tayyor integratsiyasi**:
+  - `login-url/` — Frontend ilovalar uchun Passport SSO ga yo'naltiruvchi login havolasini olish (`PassportAuthorizeURLAPIView`).
   - `callback/` — Login va avtorizatsiya kodi (`code`) orqali tizimga kirish (`PassportCallbackAPIView`).
   - `webhook/` — Passport SSO dan foydalanuvchi ma'lumotlari o'zgarganda avtomatik yangilovchi endpoint (`PassportWebhookAPIView`).
   - `sync/` — Foydalanuvchi profilini qo'lda (manual) Passport bilan qayta sinxronizatsiya qilish endpointi (`PassportSyncProfileAPIView`).
 - **To'liq ma'lumotlar sinxronizatsiyasi**:
   - Passport-dan keladigan barcha ma'lumotlar (`first_name`, `last_name`, `email`, `phone`/`phone_number`, `avatar`, `birth_date`, `passport_id`) User modelida mavjud bo'lsa avtomatik to'ldiriladi va yangilanadi.
-  - *Eslatma:* Viloyat (`region`) va tuman (`district`) ID raqamlari turli loyihalarda farq qilishi mumkinligi sababli, kutubxona ularni avtomatik bog'lamaydi. Loyiha o'zining hududiy ma'lumotlar bazasiga moslab metodlarni osongina override qilishi mumkin.
+  - *Eslatma:* Viloyat (`region`) va tuman (`district`) ID raqamlari turli loyihalarda farq qilishi sababli, kutubxona ularni avtomatik bog'lamaydi. Loyiha o'zining hududiy ma'lumotlar bazasiga moslab metodlarni osongina override qilishi mumkin.
 - **HMAC SHA-256 Webhook xavfsizligi**: Passport serveridan yuboriladigan `X-SSO-Signature` imzosini avtomatik tekshirish.
 - **Avtomatik JWT qo'llab-quvvatlash**: Agar loyihada `djangorestframework-simplejwt` mavjud bo'lsa, foydalanuvchiga avtomatik `access` va `refresh` tokenlarini generatsiya qiladi.
-- **Aniq xatoliklar tizimi**: Xatolarni tezkor ushlash va aniqlash uchun maxsus istisnolar (`PassportSDKError`).
 
 ---
 
@@ -44,9 +47,11 @@ pip install "raqamli-passport-sdk[django]"
 
 Passport provayderidan berilgan OAuth va Webhook ma'lumotlarini muhit o'zgaruvchilari yoki Django `settings.py` fayliga qo'shing:
 
-- `PASSPORT_BASE_URL`: Passport serverining asosiy manzili (masalan: `https://passport.raqamlinazorat.uz`)
+- `PASSPORT_BACKEND_URL`: Passport backend API serverining asosiy manzili (masalan: `https://backend-passport.raqamlinazorat.uz`)
+- `PASSPORT_FRONTEND_URL`: Passport login frontend sahifasining manzili (masalan: `https://passport.raqamlinazorat.uz`)
 - `PASSPORT_CLIENT_ID`: Loyihangiz uchun berilgan mijoz identifikatori
 - `PASSPORT_CLIENT_SECRET`: Loyihangiz maxfiy kaliti
+- `PASSPORT_REDIRECT_URI`: Foydalanuvchi tizimga kirgach qaytariladigan havola (Callback URL)
 - `PASSPORT_WEBHOOK_SECRET`: Webhook imzosini (HMAC SHA-256) tekshirish uchun maxfiy kalit (Passport tizimida webhook ulanganda beriladigan maxsus secret kalit)
 - `PASSPORT_TIMEOUT`: *(Ixtiyoriy)* So'rovlar uchun timeout vaqti soniyalarda (standart: `10`)
 
@@ -67,11 +72,12 @@ INSTALLED_APPS = [
     # ...
 ]
 
-PASSPORT_BASE_URL = "https://passport.raqamlinazorat.uz"
+PASSPORT_BACKEND_URL = "https://backend-passport.raqamlinazorat.uz"
+PASSPORT_FRONTEND_URL = "https://passport.raqamlinazorat.uz"
 PASSPORT_CLIENT_ID = "sizning-client-id"
 PASSPORT_CLIENT_SECRET = "sizning-client-secret"
 PASSPORT_REDIRECT_URI = "https://myproject.uz/api/v1/auth/passport/callback/"
-PASSPORT_WEBHOOK_SECRET = "sizning-webhook-secret"  # Ixtiyoriy
+PASSPORT_WEBHOOK_SECRET = "sizning-webhook-secret"
 PASSPORT_TIMEOUT = 10  # Ixtiyoriy, standart: 10 soniya
 ```
 
@@ -87,10 +93,11 @@ urlpatterns = [
 ]
 ```
 
-Bu orqali loyihangizda 3 ta tayyor endpoint faollashadi:
-1. `GET /api/v1/auth/passport/callback/?code=<CODE>` yoki `POST /api/v1/auth/passport/callback/` (`{"code": "..."}`) — Tizimga kirish.
-2. `POST /api/v1/auth/passport/webhook/` — Passport serveridan avtomatik yangilanishlarni qabul qilish.
-3. `POST /api/v1/auth/passport/sync/` (yoki `GET`) — Tizimga kirgan foydalanuvchi profilini qo'lda Passport bilan yangilash.
+Bu orqali loyihangizda 4 ta tayyor endpoint faollashadi:
+1. `GET /api/v1/auth/passport/login-url/` — Frontend uchun Passport SSO login havolasini olish (javob: `{"url": "https://passport.../login?client_id=..."}`).
+2. `GET /api/v1/auth/passport/callback/?code=<CODE>` yoki `POST /api/v1/auth/passport/callback/` (`{"code": "..."}`) — Tizimga kirish (token va foydalanuvchi ma'lumotlarini qaytaradi).
+3. `POST /api/v1/auth/passport/webhook/` — Passport serveridan avtomatik yangilanishlarni qabul qilish.
+4. `POST /api/v1/auth/passport/sync/` (yoki `GET`) — Tizimga kirgan foydalanuvchi profilini qo'lda Passport bilan yangilash.
 
 ---
 
@@ -130,9 +137,8 @@ class CustomPassportCallbackView(PassportCallbackAPIView):
     def get_or_create_user(self, user_data: dict):
         user, created = super().get_or_create_user(user_data)
         
-        # Viloyat va tumanni lokal bazaga moslab bog'lash:
-        region_data = user_data.get("region")   # {"id": 1, "name": "Toshkent"}
-        district_data = user_data.get("district") # {"id": 2, "name": "Yunusobod"}
+        region_data = user_data.get("region")
+        district_data = user_data.get("district")
         
         if region_data and hasattr(user, "region"):
             user.region = Region.objects.filter(name__iexact=region_data.get("name")).first()
@@ -146,8 +152,6 @@ class CustomPassportCallbackView(PassportCallbackAPIView):
 class CustomPassportWebhookView(PassportWebhookAPIView):
     def sync_user(self, user_data: dict):
         user = super().sync_user(user_data)
-        # Webhook kelganda ham viloyat/tumanni yangilash logikasi:
-        # ...
         return user
 ```
 
@@ -161,17 +165,18 @@ Istalgan mustaqil Python dasturida:
 from raqamli_passport import PassportClient, verify_webhook_signature, PassportSDKError
 
 client = PassportClient(
-    base_url="https://passport.raqamlinazorat.uz",
+    backend_url="https://backend-passport.raqamlinazorat.uz",
+    frontend_url="https://passport.raqamlinazorat.uz",
     client_id="sizning-client-id",
     client_secret="sizning-client-secret",
     redirect_uri="https://myproject.uz/callback",
     webhook_secret="sizning-webhook-secret",
 )
 
-# 1. Login havolasi olish:
+# 1. Login havolasi olish (foydalanuvchini yo'naltirish uchun):
 auth_url = client.get_authorization_url(scope="read", state="random_csrf_token")
 
-# 2. Kodni tekshirib foydalanuvchi ma'lumotlarini olish:
+# 2. Kodni tokenga almashtirib, foydalanuvchi ma'lumotlarini olish:
 user_info = client.authenticate_code(code="authorization_code")
 
 # 3. Webhook imzosini tekshirish:

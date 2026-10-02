@@ -12,11 +12,18 @@ User = get_user_model()
 
 
 def get_passport_client() -> PassportClient:
+    backend_url = (
+        getattr(settings, "PASSPORT_BACKEND_URL", None)
+        or getattr(settings, "PASSPORT_BASE_URL", "")
+    )
+    frontend_url = getattr(settings, "PASSPORT_FRONTEND_URL", None) or backend_url
+
     return PassportClient(
-        base_url=settings.PASSPORT_BASE_URL,
-        client_id=settings.PASSPORT_CLIENT_ID,
-        client_secret=settings.PASSPORT_CLIENT_SECRET,
-        redirect_uri=settings.PASSPORT_REDIRECT_URI,
+        backend_url=backend_url,
+        frontend_url=frontend_url,
+        client_id=getattr(settings, "PASSPORT_CLIENT_ID", ""),
+        client_secret=getattr(settings, "PASSPORT_CLIENT_SECRET", ""),
+        redirect_uri=getattr(settings, "PASSPORT_REDIRECT_URI", ""),
         timeout=getattr(settings, "PASSPORT_TIMEOUT", 10),
         webhook_secret=getattr(settings, "PASSPORT_WEBHOOK_SECRET", None),
     )
@@ -121,6 +128,20 @@ def find_or_create_user(user_model, user_data: dict):
 
     user.save()
     return user, created
+
+
+class PassportAuthorizeURLAPIView(APIView):
+    """
+    Frontend uchun Passport SSO login havolasini generatsiya qilib beruvchi endpoint.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        client = get_passport_client()
+        scope = request.GET.get("scope", "read")
+        state = request.GET.get("state")
+        url = client.get_authorization_url(scope=scope, state=state)
+        return Response({"url": url}, status=status.HTTP_200_OK)
 
 
 class PassportCallbackAPIView(APIView):
