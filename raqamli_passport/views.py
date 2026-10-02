@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import DatabaseError, IntegrityError
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -39,10 +40,13 @@ def _error(detail: str, details: dict = None, http_status: int = 400) -> Respons
         },
         "success": false
     }
+
+    Renderer 'detail' kalitini pop qilib, qolgan dict ni 'details' sifatida ishlatadi.
+    Shuning uchun qo'shimcha ma'lumotlar payload ga to'g'ridan to'g'ri merge qilinadi.
     """
     payload = {"detail": detail}
     if details:
-        payload["details"] = details
+        payload.update(details)
     return Response(payload, status=http_status)
 
 
@@ -208,6 +212,8 @@ class PassportCallbackAPIView(APIView):
 
         try:
             user, created = self.get_or_create_user(user_data)
+        except APIException:
+            raise
         except IntegrityError as exc:
             logger.error("Foydalanuvchi yaratishda IntegrityError: %s", exc)
             return _error(
@@ -305,6 +311,8 @@ class PassportWebhookAPIView(APIView):
 
         try:
             user = self.sync_user(user_data)
+        except APIException:
+            raise
         except IntegrityError as exc:
             logger.error("Webhook sync IntegrityError: %s", exc)
             return _error(
@@ -428,6 +436,8 @@ class PassportSyncProfileAPIView(APIView):
 
             try:
                 updated_fields = self.sync_user(request.user, user_data)
+            except APIException:
+                raise
             except IntegrityError as exc:
                 logger.error("Profile sync IntegrityError: %s", exc)
                 return _error(
@@ -466,6 +476,8 @@ class PassportSyncProfileAPIView(APIView):
         if payload_user and isinstance(payload_user, dict):
             try:
                 updated_fields = self.sync_user(request.user, payload_user)
+            except APIException:
+                raise
             except IntegrityError as exc:
                 logger.error("Profile sync (payload) IntegrityError: %s", exc)
                 return _error(
