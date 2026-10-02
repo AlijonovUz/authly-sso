@@ -42,6 +42,7 @@ class PassportClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
+        self.timeout = timeout
         self.webhook_secret = webhook_secret
 
     def get_authorization_url(self, scope: str = "read", state: str = None) -> str:
