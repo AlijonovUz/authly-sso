@@ -27,6 +27,17 @@ def get_passport_client() -> PassportClient:
     )
 
 
+def extract_user_payload(data: dict) -> dict:
+    """Passport yoki API dan kelgan payload ichidan user ma'lumotlarini ajratib oladi."""
+    if not isinstance(data, dict):
+        return {}
+    if "data" in data and isinstance(data["data"], dict):
+        return data["data"]
+    if "user" in data and isinstance(data["user"], dict):
+        return data["user"]
+    return data
+
+
 def populate_user_fields(user, user_data: dict) -> List[str]:
     """
     Passport-dan kelgan ma'lumotlarni User obyektiga moslab to'ldiradi.
@@ -40,9 +51,15 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
     - birth_date
     - passport_id
     """
+    clean_data = extract_user_payload(user_data)
     updated_fields = []
 
-    passport_id = user_data.get("passport_id") or user_data.get("id")
+    raw_passport_id = clean_data.get("passport_id") or clean_data.get("id")
+    passport_id = (
+        str(raw_passport_id).strip()
+        if raw_passport_id and str(raw_passport_id).strip()
+        else None
+    )
     if (
         passport_id
         and hasattr(user, "passport_id")
@@ -51,22 +68,38 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
         user.passport_id = passport_id
         updated_fields.append("passport_id")
 
-    first_name = user_data.get("first_name") or ""
-    if hasattr(user, "first_name") and getattr(user, "first_name") != first_name:
+    first_name = (clean_data.get("first_name") or "").strip()
+    if (
+        first_name
+        and hasattr(user, "first_name")
+        and getattr(user, "first_name") != first_name
+    ):
         user.first_name = first_name
         updated_fields.append("first_name")
 
-    last_name = user_data.get("last_name") or ""
-    if hasattr(user, "last_name") and getattr(user, "last_name") != last_name:
+    last_name = (clean_data.get("last_name") or "").strip()
+    if (
+        last_name
+        and hasattr(user, "last_name")
+        and getattr(user, "last_name") != last_name
+    ):
         user.last_name = last_name
         updated_fields.append("last_name")
 
-    email = user_data.get("email") or ""
-    if hasattr(user, "email") and getattr(user, "email") != email:
+    raw_email = clean_data.get("email")
+    email = (
+        raw_email.strip()
+        if isinstance(raw_email, str) and raw_email.strip()
+        else None
+    )
+    if email and hasattr(user, "email") and getattr(user, "email") != email:
         user.email = email
         updated_fields.append("email")
 
-    phone = user_data.get("phone") or user_data.get("phone_number") or ""
+    raw_phone = clean_data.get("phone") or clean_data.get("phone_number")
+    phone = (
+        str(raw_phone).strip() if raw_phone and str(raw_phone).strip() else None
+    )
     if phone:
         if hasattr(user, "phone_number") and getattr(user, "phone_number") != phone:
             user.phone_number = phone
@@ -75,12 +108,12 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
             user.phone = phone
             updated_fields.append("phone")
 
-    avatar = user_data.get("avatar") or ""
+    avatar = clean_data.get("avatar") or ""
     if avatar and hasattr(user, "avatar") and getattr(user, "avatar") != avatar:
         user.avatar = avatar
         updated_fields.append("avatar")
 
-    birth_date = user_data.get("birth_date")
+    birth_date = clean_data.get("birth_date")
     if (
         birth_date
         and hasattr(user, "birth_date")
@@ -96,7 +129,13 @@ def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
     """
     Passport ma'lumotlari orqali foydalanuvchini topadi yoki yangi yaratadi.
     """
-    passport_id = user_data.get("passport_id") or user_data.get("id")
+    clean_data = extract_user_payload(user_data)
+    raw_passport_id = clean_data.get("passport_id") or clean_data.get("id")
+    passport_id = (
+        str(raw_passport_id).strip()
+        if raw_passport_id and str(raw_passport_id).strip()
+        else None
+    )
     user = None
 
     if passport_id and hasattr(user_model, "passport_id"):
@@ -105,20 +144,28 @@ def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
     if not user and passport_id and hasattr(user_model, "username"):
         user = user_model.objects.filter(username=f"passport_{passport_id}").first()
 
-    phone = user_data.get("phone") or user_data.get("phone_number")
+    raw_phone = clean_data.get("phone") or clean_data.get("phone_number")
+    phone = (
+        str(raw_phone).strip() if raw_phone and str(raw_phone).strip() else None
+    )
     if not user and phone:
         if hasattr(user_model, "phone_number"):
             user = user_model.objects.filter(phone_number=phone).first()
         elif hasattr(user_model, "phone"):
             user = user_model.objects.filter(phone=phone).first()
 
-    email = user_data.get("email")
+    raw_email = clean_data.get("email")
+    email = (
+        raw_email.strip()
+        if isinstance(raw_email, str) and raw_email.strip()
+        else None
+    )
     if not user and email and hasattr(user_model, "email"):
         user = user_model.objects.filter(email=email).first()
 
     if user:
         created = False
-        updated = populate_user_fields(user, user_data)
+        updated = populate_user_fields(user, clean_data)
         if updated:
             user.save()
         return user, created
@@ -129,10 +176,10 @@ def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
         user.username = (
             f"passport_{passport_id}"
             if passport_id
-            else (user_data.get("username") or phone or email)
+            else (clean_data.get("username") or phone or email)
         )
 
-    populate_user_fields(user, user_data)
+    populate_user_fields(user, clean_data)
     if hasattr(user, "set_unusable_password"):
         user.set_unusable_password()
 

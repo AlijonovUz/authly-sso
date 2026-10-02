@@ -124,7 +124,13 @@ class PassportClient:
                     status_code=response.status_code,
                     details=response.text,
                 )
-            return response.json()
+            data = response.json()
+            if isinstance(data, dict):
+                if "data" in data and isinstance(data["data"], dict):
+                    return data["data"]
+                if "user" in data and isinstance(data["user"], dict):
+                    return data["user"]
+            return data
         except requests.RequestException as e:
             raise PassportProfileFetchError(
                 f"Passport serveriga bog'lanishda xatolik: {str(e)}"
