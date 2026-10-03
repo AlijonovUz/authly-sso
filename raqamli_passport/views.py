@@ -53,6 +53,29 @@ def _error(detail: str, details: dict = None, http_status: int = 400) -> Respons
     return Response(payload, status=http_status)
 
 
+def _get_avatar_url(user, clean_data: dict) -> str:
+    """Foydalanuvchi avatarining xavfsiz URL matnini qaytaradi (JSON seriyalizatsiya uchun)."""
+    avatar_val = None
+    for field_name in ("avatar", "image", "photo", "profile_image", "profile_photo"):
+        if hasattr(user, field_name):
+            field_obj = getattr(user, field_name, None)
+            if field_obj:
+                try:
+                    avatar_val = field_obj.url
+                except Exception:
+                    avatar_val = str(field_obj)
+                if avatar_val:
+                    break
+    if not avatar_val:
+        avatar_val = (
+            clean_data.get("avatar")
+            or clean_data.get("image")
+            or clean_data.get("photo")
+            or ""
+        )
+    return str(avatar_val) if avatar_val else ""
+
+
 class PassportAuthorizeURLAPIView(APIView):
     """
     Frontend uchun Passport SSO login havolasini generatsiya qilib beruvchi endpoint.
@@ -144,7 +167,7 @@ class PassportCallbackAPIView(APIView):
                     or getattr(user, "phone", None)
                     or clean_data.get("phone", "")
                 ),
-                "avatar": getattr(user, "avatar", None) or clean_data.get("avatar", ""),
+                "avatar": _get_avatar_url(user, clean_data),
                 "birth_date": (
                     getattr(user, "birth_date", None)
                     or clean_data.get("birth_date", None)
@@ -427,7 +450,7 @@ class PassportSyncProfileAPIView(APIView):
                 or getattr(user, "phone", None)
                 or clean_data.get("phone", "")
             ),
-            "avatar": getattr(user, "avatar", None) or clean_data.get("avatar", ""),
+            "avatar": _get_avatar_url(user, clean_data),
             "birth_date": (
                 getattr(user, "birth_date", None) or clean_data.get("birth_date", None)
             ),
