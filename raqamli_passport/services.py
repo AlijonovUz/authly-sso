@@ -1,4 +1,9 @@
+import logging
+import os
 from typing import Tuple, List, Dict, Any, Optional
+from urllib.parse import urlparse
+
+import requests
 
 try:
     from django.conf import settings
@@ -7,6 +12,8 @@ except ImportError:
 
 from .client import PassportClient
 from .exceptions import PassportSDKError
+
+logger = logging.getLogger(__name__)
 
 
 def get_passport_client() -> PassportClient:
@@ -109,9 +116,35 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
             updated_fields.append("phone")
 
     avatar = clean_data.get("avatar") or ""
-    if avatar and hasattr(user, "avatar") and getattr(user, "avatar") != avatar:
-        user.avatar = avatar
-        updated_fields.append("avatar")
+    if avatar and hasattr(user, "avatar"):
+        is_file_field = False
+        try:
+            from django.db.models import FileField
+            field = user._meta.get_field("avatar")
+            is_file_field = isinstance(field, FileField)
+        except Exception:
+            pass
+
+        if is_file_field:
+            if isinstance(avatar, str) and (
+                avatar.startswith("http://") or avatar.startswith("https://")
+            ):
+                try:
+                    res = requests.get(avatar, timeout=5)
+                    if res.status_code == 200:
+                        from django.core.files.base import ContentFile
+
+                        path = urlparse(avatar).path
+                        ext = os.path.splitext(path)[1] or ".jpg"
+                        filename = f"passport_{passport_id or user.pk or 'avatar'}{ext}"
+                        user.avatar.save(filename, ContentFile(res.content), save=False)
+                        updated_fields.append("avatar")
+                except Exception as exc:
+                    logger.warning("Avatar yuklab olishda xatolik yuz berdi: %s", exc)
+        else:
+            if getattr(user, "avatar") != avatar:
+                user.avatar = avatar
+                updated_fields.append("avatar")
 
     birth_date = clean_data.get("birth_date")
     if (
