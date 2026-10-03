@@ -236,6 +236,7 @@ class PassportCallbackAPIView(APIView):
             logger.error("Foydalanuvchi yaratishda DatabaseError: %s", exc)
             return _error(
                 "Foydalanuvchi ma'lumotlari bazaga saqlashda xatolik yuz berdi.",
+                details={"db_error": str(exc)},
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         except Exception as exc:
@@ -334,6 +335,7 @@ class PassportWebhookAPIView(APIView):
             logger.error("Webhook sync DatabaseError: %s", exc)
             return _error(
                 "Foydalanuvchi bazaga saqlashda xatolik yuz berdi.",
+                details={"db_error": str(exc)},
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         except Exception as exc:
@@ -484,6 +486,7 @@ class PassportSyncProfileAPIView(APIView):
                 logger.error("Profile sync DatabaseError: %s", exc)
                 return _error(
                     "Profil bazaga saqlashda xatolik yuz berdi.",
+                    details={"db_error": str(exc)},
                     http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
             except Exception as exc:
@@ -524,6 +527,7 @@ class PassportSyncProfileAPIView(APIView):
                 logger.error("Profile sync (payload) DatabaseError: %s", exc)
                 return _error(
                     "Profil bazaga saqlashda xatolik yuz berdi.",
+                    details={"db_error": str(exc)},
                     http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
             except Exception as exc:
