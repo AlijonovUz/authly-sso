@@ -115,12 +115,19 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
             user.phone = phone
             updated_fields.append("phone")
 
-    avatar = clean_data.get("avatar") or ""
-    if avatar and hasattr(user, "avatar"):
+    avatar = clean_data.get("avatar") or clean_data.get("image") or clean_data.get("photo") or ""
+    avatar_field_name = None
+    for fname in ["avatar", "image", "photo", "profile_image", "profile_photo"]:
+        if hasattr(user, fname):
+            avatar_field_name = fname
+            break
+
+    if avatar and avatar_field_name:
         is_file_field = False
         try:
             from django.db.models import FileField
-            field = user._meta.get_field("avatar")
+
+            field = user._meta.get_field(avatar_field_name)
             is_file_field = isinstance(field, FileField)
         except Exception:
             pass
@@ -137,14 +144,16 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
                         path = urlparse(avatar).path
                         ext = os.path.splitext(path)[1] or ".jpg"
                         filename = f"passport_{passport_id or user.pk or 'avatar'}{ext}"
-                        user.avatar.save(filename, ContentFile(res.content), save=False)
-                        updated_fields.append("avatar")
+                        getattr(user, avatar_field_name).save(
+                            filename, ContentFile(res.content), save=False
+                        )
+                        updated_fields.append(avatar_field_name)
                 except Exception as exc:
                     logger.warning("Avatar yuklab olishda xatolik yuz berdi: %s", exc)
         else:
-            if getattr(user, "avatar") != avatar:
-                user.avatar = avatar
-                updated_fields.append("avatar")
+            if getattr(user, avatar_field_name) != avatar:
+                setattr(user, avatar_field_name, avatar)
+                updated_fields.append(avatar_field_name)
 
     birth_date = clean_data.get("birth_date")
     if (
