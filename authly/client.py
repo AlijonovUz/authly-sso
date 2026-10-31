@@ -2,12 +2,12 @@ import hashlib
 import hmac
 import requests
 from urllib.parse import urlencode
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from .exceptions import (
-    PassportSDKError,
-    PassportTokenExchangeError,
-    PassportProfileFetchError,
-    PassportWebhookSignatureError,
+    AuthlySDKError,
+    AuthlyTokenExchangeError,
+    AuthlyProfileFetchError,
+    AuthlyWebhookSignatureError,
 )
 
 
@@ -29,7 +29,12 @@ def verify_webhook_signature(secret: str, payload_bytes: bytes, signature: str) 
     return hmac.compare_digest(expected, signature)
 
 
-class PassportClient:
+class AuthlyClient:
+    """
+    Authly SSO (OAuth2) bilan aloqa o'rnatuvchi mijoz klassi.
+    Sof Python, FastAPI, Flask yoki Django loyihalarida to'g'ridan-to'g'ri ishlatilishi mumkin.
+    """
+
     def __init__(
         self,
         backend_url: Optional[str] = None,
@@ -57,11 +62,11 @@ class PassportClient:
         state: Optional[str] = None,
         redirect_uri: Optional[str] = None,
     ) -> str:
-        """Foydalanuvchini Passport frontendiga yo'naltiruvchi havola yasaydi."""
+        """Foydalanuvchini Authly SSO login sahifasiga yo'naltiruvchi havola yasaydi."""
         target_redirect_uri = redirect_uri or self.redirect_uri
         if not target_redirect_uri:
-            raise PassportSDKError(
-                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki mijoz sozlamalarida 'redirect_uri' ni belgilang."
+            raise AuthlySDKError(
+                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki sozlamalarda 'redirect_uri' ni belgilang."
             )
         params = {
             "client_id": self.client_id,
@@ -78,11 +83,11 @@ class PassportClient:
         code_verifier: Optional[str] = None,
         redirect_uri: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Bir martalik kodni 'access_token'ga almashtiradi."""
+        """Bir martalik avtorizatsiya kodini OAuth tokenlarga almashtiradi."""
         target_redirect_uri = redirect_uri or self.redirect_uri
         if not target_redirect_uri:
-            raise PassportTokenExchangeError(
-                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki mijoz sozlamalarida 'redirect_uri' ni belgilang."
+            raise AuthlyTokenExchangeError(
+                "'redirect_uri' ko'rsatilmadi. Metodga 'redirect_uri' uzating yoki sozlamalarda 'redirect_uri' ni belgilang."
             )
         token_endpoint = f"{self.backend_url}/oauth/token/"
         payload = {
@@ -95,31 +100,41 @@ class PassportClient:
         if code_verifier:
             payload["code_verifier"] = code_verifier
 
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Authly-Python-SDK/0.4.0",
+        }
+
         try:
-            response = requests.post(token_endpoint, data=payload, timeout=self.timeout)
+            response = requests.post(
+                token_endpoint, data=payload, headers=headers, timeout=self.timeout
+            )
             if response.status_code != 200:
-                raise PassportTokenExchangeError(
+                raise AuthlyTokenExchangeError(
                     message="Token olishda xatolik yuz berdi",
                     status_code=response.status_code,
                     details=response.text,
                 )
             return response.json()
         except requests.RequestException as e:
-            raise PassportTokenExchangeError(
-                f"Passport serveriga bog'lanishda xatolik: {str(e)}"
+            raise AuthlyTokenExchangeError(
+                f"Authly serveriga bog'lanishda xatolik: {str(e)}"
             )
 
     def get_user_profile(self, access_token: str) -> Dict[str, Any]:
-        """OAuth access_token orqali foydalanuvchi ma'lumotlarini qaytaradi."""
+        """OAuth access_token orqali foydalanuvchi ma'lumotlarini yuklaydi."""
         profile_endpoint = f"{self.backend_url}/api/v1/sso/profile/"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "User-Agent": "Authly-Python-SDK/0.4.0",
+        }
 
         try:
             response = requests.get(
                 profile_endpoint, headers=headers, timeout=self.timeout
             )
             if response.status_code != 200:
-                raise PassportProfileFetchError(
+                raise AuthlyProfileFetchError(
                     message="Profil ma'lumotlarini olish imkoni bo'lmadi",
                     status_code=response.status_code,
                     details=response.text,
@@ -132,8 +147,8 @@ class PassportClient:
                     return data["user"]
             return data
         except requests.RequestException as e:
-            raise PassportProfileFetchError(
-                f"Passport serveriga bog'lanishda xatolik: {str(e)}"
+            raise AuthlyProfileFetchError(
+                f"Authly serveriga bog'lanishda xatolik: {str(e)}"
             )
 
     def authenticate_code(
@@ -141,9 +156,9 @@ class PassportClient:
         code: str,
         code_verifier: Optional[str] = None,
         redirect_uri: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], str]:
         """
-        Kodni berib, foydalanuvchi profili va Passport access_token ni qaytaruvchi metod.
+        Kodni berib, foydalanuvchi profili va Authly access_token ni qaytaruvchi metod.
         Qaytaradi: (profile_dict, access_token_str)
         """
         token_data = self.exchange_code_for_token(
@@ -159,3 +174,5 @@ class PassportClient:
         """Kelgan webhook so'rovining imzosini tekshiradi."""
         target_secret = secret or self.webhook_secret
         return verify_webhook_signature(target_secret, payload_bytes, signature)
+
+

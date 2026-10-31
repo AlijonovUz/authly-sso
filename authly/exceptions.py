@@ -1,10 +1,10 @@
-class PassportSDKError(Exception):
+class AuthlySDKError(Exception):
     """Asosiy SDK xatoligi."""
 
     pass
 
 
-class PassportTokenExchangeError(PassportSDKError):
+class AuthlyTokenExchangeError(AuthlySDKError):
     """Kodni tokenga almashtirishda xatolik yuz berganda."""
 
     def __init__(self, message, status_code=None, details=None):
@@ -13,7 +13,7 @@ class PassportTokenExchangeError(PassportSDKError):
         self.details = details
 
 
-class PassportProfileFetchError(PassportSDKError):
+class AuthlyProfileFetchError(AuthlySDKError):
     """Foydalanuvchi profilini olishda xatolik yuz berganda."""
 
     def __init__(self, message, status_code=None, details=None):
@@ -22,7 +22,7 @@ class PassportProfileFetchError(PassportSDKError):
         self.details = details
 
 
-class PassportWebhookSignatureError(PassportSDKError):
+class AuthlyWebhookSignatureError(AuthlySDKError):
     """Webhook imzosini tekshirishda xatolik yuz berganda."""
 
     pass

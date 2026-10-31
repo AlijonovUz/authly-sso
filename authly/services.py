@@ -10,32 +10,38 @@ try:
 except ImportError:
     settings = None
 
-from .client import PassportClient
-from .exceptions import PassportSDKError
+from .client import AuthlyClient
+from .exceptions import AuthlySDKError
 
 logger = logging.getLogger(__name__)
 
 
-def get_passport_client() -> PassportClient:
-    """PassportClient instansiyasini Django settings sozlamalari asosida qaytaradi."""
+def get_authly_client() -> AuthlyClient:
+    """AuthlyClient instansiyasini Django sozlamalari asosida qaytaradi."""
     if settings is None:
-        raise PassportSDKError("Django o'rnatilmagan yoki sozlanmagan.")
-    backend_url = getattr(settings, "PASSPORT_BACKEND_URL", "")
-    frontend_url = getattr(settings, "PASSPORT_FRONTEND_URL", None) or backend_url
+        raise AuthlySDKError("Django o'rnatilmagan yoki sozlanmagan.")
 
-    return PassportClient(
+    backend_url = getattr(settings, "AUTHLY_BACKEND_URL", "")
+    frontend_url = getattr(settings, "AUTHLY_FRONTEND_URL", None) or backend_url
+    client_id = getattr(settings, "AUTHLY_CLIENT_ID", "")
+    client_secret = getattr(settings, "AUTHLY_CLIENT_SECRET", "")
+    redirect_uri = getattr(settings, "AUTHLY_REDIRECT_URI", "")
+    timeout = getattr(settings, "AUTHLY_TIMEOUT", 10)
+    webhook_secret = getattr(settings, "AUTHLY_WEBHOOK_SECRET", None)
+
+    return AuthlyClient(
         backend_url=backend_url,
         frontend_url=frontend_url,
-        client_id=getattr(settings, "PASSPORT_CLIENT_ID", ""),
-        client_secret=getattr(settings, "PASSPORT_CLIENT_SECRET", ""),
-        redirect_uri=getattr(settings, "PASSPORT_REDIRECT_URI", ""),
-        timeout=getattr(settings, "PASSPORT_TIMEOUT", 10),
-        webhook_secret=getattr(settings, "PASSPORT_WEBHOOK_SECRET", None),
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        timeout=timeout,
+        webhook_secret=webhook_secret,
     )
 
 
 def extract_user_payload(data: dict) -> dict:
-    """Passport yoki API dan kelgan payload ichidan user ma'lumotlarini ajratib oladi."""
+    """Authly API yoki webhook payload ichidan user ma'lumotlarini ajratib oladi."""
     if not isinstance(data, dict):
         return {}
     if "data" in data and isinstance(data["data"], dict):
@@ -47,33 +53,27 @@ def extract_user_payload(data: dict) -> dict:
 
 def populate_user_fields(user, user_data: dict) -> List[str]:
     """
-    Passport-dan kelgan ma'lumotlarni User obyektiga moslab to'ldiradi.
-    Viloyat (region) va tuman (district) ID-lar loyihalarda har xil bo'lgani sababli
-    avtomatik bog'lanmaydi.
-
-    User modelida mavjud bo'lgan barcha mos maydonlar avtomatik to'ldiriladi:
+    Authly SSO dan kelgan ma'lumotlarni User obyektiga moslab to'ldiradi.
+    Lokal modelda mavjud bo'lgan barcha mos maydonlar avtomatik to'ldiriladi:
+    - authly_id
     - first_name, last_name, email
     - phone / phone_number
     - avatar
     - birth_date
-    - passport_id
     """
     clean_data = extract_user_payload(user_data)
     updated_fields = []
 
-    raw_passport_id = clean_data.get("passport_id") or clean_data.get("id")
-    passport_id = (
-        str(raw_passport_id).strip()
-        if raw_passport_id and str(raw_passport_id).strip()
+    raw_authly_id = clean_data.get("authly_id") or clean_data.get("id")
+    authly_id = (
+        str(raw_authly_id).strip()
+        if raw_authly_id and str(raw_authly_id).strip()
         else None
     )
-    if (
-        passport_id
-        and hasattr(user, "passport_id")
-        and getattr(user, "passport_id") != passport_id
-    ):
-        user.passport_id = passport_id
-        updated_fields.append("passport_id")
+
+    if authly_id and hasattr(user, "authly_id") and getattr(user, "authly_id") != authly_id:
+        user.authly_id = authly_id
+        updated_fields.append("authly_id")
 
     first_name = (clean_data.get("first_name") or "").strip()
     if (
@@ -115,7 +115,12 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
             user.phone = phone
             updated_fields.append("phone")
 
-    avatar = clean_data.get("avatar") or clean_data.get("image") or clean_data.get("photo") or ""
+    avatar = (
+        clean_data.get("avatar")
+        or clean_data.get("image")
+        or clean_data.get("photo")
+        or ""
+    )
     avatar_field_name = None
     for fname in ["avatar", "image", "photo", "profile_image", "profile_photo"]:
         if hasattr(user, fname):
@@ -143,7 +148,7 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
 
                         path = urlparse(avatar).path
                         ext = os.path.splitext(path)[1] or ".jpg"
-                        filename = f"passport_{passport_id or user.pk or 'avatar'}{ext}"
+                        filename = f"authly_{authly_id or user.pk or 'avatar'}{ext}"
                         getattr(user, avatar_field_name).save(
                             filename, ContentFile(res.content), save=False
                         )
@@ -169,22 +174,27 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
 
 def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
     """
-    Passport ma'lumotlari orqali foydalanuvchini topadi yoki yangi yaratadi.
+    Authly ma'lumotlari orqali foydalanuvchini topadi yoki yangi yaratadi.
+    Qidirish tartibi:
+    1. authly_id
+    2. username ("authly_{authly_id}")
+    3. phone / phone_number
+    4. email
     """
     clean_data = extract_user_payload(user_data)
-    raw_passport_id = clean_data.get("passport_id") or clean_data.get("id")
-    passport_id = (
-        str(raw_passport_id).strip()
-        if raw_passport_id and str(raw_passport_id).strip()
+    raw_authly_id = clean_data.get("authly_id") or clean_data.get("id")
+    authly_id = (
+        str(raw_authly_id).strip()
+        if raw_authly_id and str(raw_authly_id).strip()
         else None
     )
     user = None
 
-    if passport_id and hasattr(user_model, "passport_id"):
-        user = user_model.objects.filter(passport_id=passport_id).first()
+    if authly_id and hasattr(user_model, "authly_id"):
+        user = user_model.objects.filter(authly_id=authly_id).first()
 
-    if not user and passport_id and hasattr(user_model, "username"):
-        user = user_model.objects.filter(username=f"passport_{passport_id}").first()
+    if not user and authly_id and hasattr(user_model, "username"):
+        user = user_model.objects.filter(username=f"authly_{authly_id}").first()
 
     raw_phone = clean_data.get("phone") or clean_data.get("phone_number")
     phone = (
@@ -216,8 +226,8 @@ def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
     user = user_model()
     if hasattr(user, "username"):
         user.username = (
-            f"passport_{passport_id}"
-            if passport_id
+            f"authly_{authly_id}"
+            if authly_id
             else (clean_data.get("username") or phone or email)
         )
 
@@ -231,7 +241,8 @@ def find_or_create_user(user_model, user_data: dict) -> Tuple[Any, bool]:
 
 def generate_user_jwt_tokens(user) -> Dict[str, str]:
     """
-    Agar simplejwt o'rnatilgan bo'lsa, user uchun access va refresh tokenlarni generatsiya qiladi.
+    Agar rest_framework_simplejwt o'rnatilgan bo'lsa,
+    user uchun access va refresh tokenlarni generatsiya qiladi.
     """
     tokens = {}
     try:
@@ -247,15 +258,15 @@ def generate_user_jwt_tokens(user) -> Dict[str, str]:
     return tokens
 
 
-class PassportService:
+class AuthlyService:
     """
-    Passport SSO uchun servis sinfi.
-    Biznes logikasini bitta joyda jamlaydi.
+    Authly SSO uchun servis klassi.
+    Biznes mantiqini bitta joyda jamlaydi.
     """
 
     @staticmethod
-    def get_client() -> PassportClient:
-        return get_passport_client()
+    def get_client() -> AuthlyClient:
+        return get_authly_client()
 
     @staticmethod
     def populate_user(user, user_data: dict) -> List[str]:

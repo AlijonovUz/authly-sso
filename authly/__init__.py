@@ -1,35 +1,37 @@
 from .client import (
-    PassportClient,
+    AuthlyClient,
     calculate_signature,
     verify_webhook_signature,
 )
 from .exceptions import (
-    PassportSDKError,
-    PassportTokenExchangeError,
-    PassportProfileFetchError,
-    PassportWebhookSignatureError,
+    AuthlySDKError,
+    AuthlyTokenExchangeError,
+    AuthlyProfileFetchError,
+    AuthlyWebhookSignatureError,
 )
 from .services import (
-    PassportService,
-    get_passport_client,
+    AuthlyService,
+    get_authly_client,
     populate_user_fields,
     find_or_create_user,
     generate_user_jwt_tokens,
     extract_user_payload,
 )
 
+__version__ = "0.4.0"
+
 __all__ = [
-    "PassportClient",
-    "PassportService",
-    "get_passport_client",
+    "AuthlyClient",
+    "AuthlyService",
+    "get_authly_client",
     "populate_user_fields",
     "find_or_create_user",
     "generate_user_jwt_tokens",
     "extract_user_payload",
-    "PassportSDKError",
-    "PassportTokenExchangeError",
-    "PassportProfileFetchError",
-    "PassportWebhookSignatureError",
+    "AuthlySDKError",
+    "AuthlyTokenExchangeError",
+    "AuthlyProfileFetchError",
+    "AuthlyWebhookSignatureError",
     "calculate_signature",
     "verify_webhook_signature",
 ]

@@ -10,13 +10,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .client import verify_webhook_signature
-from .exceptions import PassportSDKError
+from .exceptions import AuthlySDKError
 from .services import (
-    PassportService,
+    AuthlyService,
     extract_user_payload,
     find_or_create_user,
     generate_user_jwt_tokens,
-    get_passport_client,
+    get_authly_client,
     populate_user_fields,
 )
 
@@ -26,24 +26,7 @@ User = get_user_model()
 
 
 def _error(detail: str, details: dict = None, http_status: int = 400) -> Response:
-    """
-    Xatolik uchun standart DRF Response qaytaradi.
-    ResponseRenderer bu formatni avtomatik ravishda quyidagicha o'raydi:
-    {
-        "data": null,
-        "error": {
-            "errorId": <http_status>,
-            "errorCode": null,
-            "isFriendly": true,
-            "errorMsg": "<detail>",
-            "details": <details>
-        },
-        "success": false
-    }
-
-    Renderer 'detail' kalitini pop qilib, qolgan dict ni 'details' sifatida ishlatadi.
-    Shuning uchun qo'shimcha ma'lumotlar payload ga to'g'ridan to'g'ri merge qilinadi.
-    """
+    """Xatolik uchun standart DRF Response qaytaradi."""
     payload = {"detail": detail}
     if details:
         if isinstance(details, dict):
@@ -76,9 +59,9 @@ def _get_avatar_url(user, clean_data: dict) -> str:
     return str(avatar_val) if avatar_val else ""
 
 
-class PassportAuthorizeURLAPIView(APIView):
+class AuthlyAuthorizeURLAPIView(APIView):
     """
-    Frontend uchun Passport SSO login havolasini generatsiya qilib beruvchi endpoint.
+    Frontend uchun Authly SSO login havolasini generatsiya qilib beruvchi endpoint.
     Ixtiyoriy parametrlar: scope, state, redirect_uri.
     """
 
@@ -87,14 +70,14 @@ class PassportAuthorizeURLAPIView(APIView):
     def get(self, request, *args, **kwargs):
         """GET so'rovi orqali OAuth2 avtorizatsiya URL-ini qaytaradi."""
         try:
-            client = get_passport_client()
-        except PassportSDKError as exc:
-            logger.error("PassportClient yaratishda xatolik: %s", exc)
+            client = get_authly_client()
+        except AuthlySDKError as exc:
+            logger.error("AuthlyClient yaratishda xatolik: %s", exc)
             return _error(str(exc), http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as exc:
-            logger.exception("Kutilmagan xatolik PassportClient yaratishda")
+            logger.exception("Kutilmagan xatolik AuthlyClient yaratishda")
             return _error(
-                "Passport konfiguratsiyasida ichki xatolik yuz berdi.",
+                "Authly konfiguratsiyasida ichki xatolik yuz berdi.",
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -106,7 +89,7 @@ class PassportAuthorizeURLAPIView(APIView):
         if not final_redirect_uri:
             return _error(
                 "'redirect_uri' ko'rsatilmadi. So'rovda 'redirect_uri' parametrini "
-                "yuboring yoki loyiha sozlamalarida PASSPORT_REDIRECT_URI ni belgilang.",
+                "yuboring yoki loyiha sozlamalarida AUTHLY_REDIRECT_URI ni belgilang.",
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -115,7 +98,7 @@ class PassportAuthorizeURLAPIView(APIView):
                 scope=scope, state=state, redirect_uri=final_redirect_uri
             )
             return Response({"url": url}, status=status.HTTP_200_OK)
-        except PassportSDKError as exc:
+        except AuthlySDKError as exc:
             return _error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             logger.exception("Avtorizatsiya URL yaratishda kutilmagan xatolik")
@@ -125,7 +108,7 @@ class PassportAuthorizeURLAPIView(APIView):
             )
 
 
-class PassportCallbackAPIView(APIView):
+class AuthlyCallbackAPIView(APIView):
     """
     OAuth2 callback uchun tayyor endpoint.
     Frontend yoki SSO provayderidan kelgan 'code' orqali foydalanuvchini tizimga kiritadi.
@@ -141,26 +124,40 @@ class PassportCallbackAPIView(APIView):
     def get_or_create_user(self, user_data: dict):
         """
         Lokal loyiha o'ziga moslab override qilishi uchun asosiy nuqta.
-        user_data — Passport'dan kelgan to'liq payload (extract qilinmagan).
+        user_data — Authly'dan kelgan to'liq payload.
         """
         return find_or_create_user(self.get_user_model(), user_data)
 
     def get_response_data(
-        self, user, user_data: dict, created: bool, tokens: dict, passport_access_token: str = None
+        self,
+        user,
+        user_data: dict,
+        created: bool,
+        tokens: dict,
+        authly_access_token: str = None,
     ) -> dict:
         """
         Muvaffaqiyatli callback uchun javob strukturasini qaytaradi.
-        passport_access_token — frontend sinxronizatsiya uchun saqlashi kerak bo'lgan
-        Passport OAuth tokeni. Bu lokal JWT emas — Passport serveriga murojaat uchun.
+        authly_access_token — frontend sinxronizatsiya uchun saqlashi kerak bo'lgan
+        Authly OAuth tokeni.
         """
         clean_data = extract_user_payload(user_data)
+        raw_authly_id = clean_data.get("authly_id") or clean_data.get("id")
+        authly_id = (
+            str(raw_authly_id).strip()
+            if raw_authly_id and str(raw_authly_id).strip()
+            else None
+        )
+
         data = {
             "is_new_user": created,
             "user": {
                 "id": user.id,
-                "passport_id": clean_data.get("passport_id") or clean_data.get("id"),
+                "authly_id": authly_id,
                 "username": getattr(user, "username", ""),
                 "full_name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip(),
+                "first_name": getattr(user, "first_name", ""),
+                "last_name": getattr(user, "last_name", ""),
                 "email": getattr(user, "email", ""),
                 "phone": (
                     getattr(user, "phone_number", None)
@@ -175,8 +172,8 @@ class PassportCallbackAPIView(APIView):
             },
             **tokens,
         }
-        if passport_access_token:
-            data["passport_access_token"] = passport_access_token
+        if authly_access_token:
+            data["authly_access_token"] = authly_access_token
         return data
 
     def generate_tokens(self, user) -> dict:
@@ -206,14 +203,14 @@ class PassportCallbackAPIView(APIView):
             )
 
         try:
-            client = get_passport_client()
-        except PassportSDKError as exc:
-            logger.error("PassportClient yaratishda xatolik: %s", exc)
+            client = get_authly_client()
+        except AuthlySDKError as exc:
+            logger.error("AuthlyClient yaratishda xatolik: %s", exc)
             return _error(str(exc), http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as exc:
-            logger.exception("Passport konfiguratsiyasida kutilmagan xatolik")
+            logger.exception("Authly konfiguratsiyasida kutilmagan xatolik")
             return _error(
-                "Passport konfiguratsiyasida ichki xatolik yuz berdi.",
+                "Authly konfiguratsiyasida ichki xatolik yuz berdi.",
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -222,24 +219,24 @@ class PassportCallbackAPIView(APIView):
         if not final_redirect_uri:
             return _error(
                 "'redirect_uri' ko'rsatilmadi. So'rovda 'redirect_uri' parametrini "
-                "yuboring yoki loyiha sozlamalarida PASSPORT_REDIRECT_URI ni belgilang.",
+                "yuboring yoki loyiha sozlamalarida AUTHLY_REDIRECT_URI ni belgilang.",
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            user_data, passport_access_token = client.authenticate_code(
+            user_data, authly_access_token = client.authenticate_code(
                 code, code_verifier=code_verifier, redirect_uri=final_redirect_uri
             )
-        except PassportSDKError as exc:
+        except AuthlySDKError as exc:
             return _error(
                 str(exc),
                 details=getattr(exc, "details", None),
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as exc:
-            logger.exception("Passport token almashtirishda kutilmagan xatolik")
+            logger.exception("Authly token almashtirishda kutilmagan xatolik")
             return _error(
-                "Passport serveri bilan aloqada ichki xatolik yuz berdi.",
+                "Authly serveri bilan aloqada ichki xatolik yuz berdi.",
                 http_status=status.HTTP_502_BAD_GATEWAY,
             )
 
@@ -280,7 +277,9 @@ class PassportCallbackAPIView(APIView):
             )
 
         return Response(
-            self.get_response_data(user, user_data, created, tokens, passport_access_token),
+            self.get_response_data(
+                user, user_data, created, tokens, authly_access_token
+            ),
             status=status.HTTP_200_OK,
         )
 
@@ -293,9 +292,9 @@ class PassportCallbackAPIView(APIView):
         return self.handle_callback(request)
 
 
-class PassportWebhookAPIView(APIView):
+class AuthlyWebhookAPIView(APIView):
     """
-    Passport serveridan avtomatik o'zgarishlarni qabul qiluvchi Webhook endpoint.
+    Authly serveridan avtomatik o'zgarishlarni qabul qiluvchi Webhook endpoint.
     Foydalanuvchi ma'lumotlari o'zgarganda bazadagi foydalanuvchini avtomatik yangilaydi.
     """
 
@@ -307,7 +306,7 @@ class PassportWebhookAPIView(APIView):
 
     def get_webhook_secret(self) -> str:
         """Webhook imzosini tekshirish uchun maxfiy kalitni qaytaradi."""
-        return getattr(settings, "PASSPORT_WEBHOOK_SECRET", "")
+        return getattr(settings, "AUTHLY_WEBHOOK_SECRET", "")
 
     def verify_signature(self, request) -> bool:
         """X-SSO-Signature sarlavhasi orqali webhook imzosini tekshiradi."""
@@ -379,28 +378,26 @@ class PassportWebhookAPIView(APIView):
         )
 
 
-class PassportSyncProfileAPIView(APIView):
+class AuthlySyncProfileAPIView(APIView):
     """
-    Foydalanuvchi ma'lumotlarini qo'lda (manual) Passport bilan sinxronlashtirish endpointi.
-    Login qilgan foydalanuvchi o'z profilini Passport-dan qayta yangilab olishi mumkin.
+    Foydalanuvchi ma'lumotlarini qo'lda (manual) Authly bilan sinxronlashtirish endpointi.
+    Login qilgan foydalanuvchi o'z profilini Authly-dan qayta yangilab olishi mumkin.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get_access_token(self, request) -> str:
         """
-        So'rovdan yoki sessiyadan Passport OAuth access_token-ni oladi.
+        So'rovdan yoki sessiyadan Authly OAuth access_token-ni oladi.
         Lokal loyiha tokenni o'z saqlash joyiga qarab override qilishi mumkin.
         """
-        token = (
-            request.data.get("access_token")
-            if hasattr(request, "data") and isinstance(request.data, dict)
-            else None
-        )
+        token = None
+        if hasattr(request, "data") and isinstance(request.data, dict):
+            token = request.data.get("access_token") or request.data.get("authly_access_token")
         if not token:
-            token = request.GET.get("access_token")
+            token = request.GET.get("access_token") or request.GET.get("authly_access_token")
         if not token and hasattr(request, "session"):
-            token = request.session.get("passport_access_token")
+            token = request.session.get("authly_access_token")
         return token
 
     def sync_user(self, user, user_data: dict) -> list:
@@ -416,10 +413,15 @@ class PassportSyncProfileAPIView(APIView):
     def get_response_data(self, user, user_data: dict) -> dict:
         """
         Sinxronizatsiya natijasidagi foydalanuvchi ma'lumotlarini qaytaradi.
-        region_info va district_info lokal modeldan olinadi, bo'lmasa Passport
-        payloadidagi xom ma'lumot qaytariladi.
+        region_info va district_info lokal modeldan olinadi, bo'lmasa Authly
+        payloadidagi ma'lumot qaytariladi.
         """
         clean_data = extract_user_payload(user_data)
+        raw_authly_id = (
+            clean_data.get("authly_id")
+            or clean_data.get("id")
+            or getattr(user, "authly_id", None)
+        )
 
         region = getattr(user, "region", None)
         if region is not None:
@@ -428,7 +430,7 @@ class PassportSyncProfileAPIView(APIView):
                 "name": getattr(region, "name", None),
             }
         else:
-            region_info = clean_data.get("region")
+            region_info = clean_data.get("region_info") or clean_data.get("region")
 
         district = getattr(user, "district", None)
         if district is not None:
@@ -437,11 +439,11 @@ class PassportSyncProfileAPIView(APIView):
                 "name": getattr(district, "name", None),
             }
         else:
-            district_info = clean_data.get("district")
+            district_info = clean_data.get("district_info") or clean_data.get("district")
 
         return {
             "id": user.id,
-            "passport_id": clean_data.get("passport_id") or getattr(user, "passport_id", None),
+            "authly_id": raw_authly_id,
             "first_name": getattr(user, "first_name", ""),
             "last_name": getattr(user, "last_name", ""),
             "email": getattr(user, "email", ""),
@@ -461,36 +463,36 @@ class PassportSyncProfileAPIView(APIView):
     def handle_sync(self, request):
         """
         Sinxronizatsiya so'rovini qayta ishlaydi.
-        access_token bo'lsa Passport'dan so'nggi profil olinadi,
+        access_token bo'lsa Authly'dan so'nggi profil olinadi,
         aks holda so'rov tanasidagi 'user' ma'lumotlari ishlatiladi.
         """
         access_token = self.get_access_token(request)
 
         if access_token:
             try:
-                client = get_passport_client()
-            except PassportSDKError as exc:
-                logger.error("PassportClient yaratishda xatolik: %s", exc)
+                client = get_authly_client()
+            except AuthlySDKError as exc:
+                logger.error("AuthlyClient yaratishda xatolik: %s", exc)
                 return _error(str(exc), http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             except Exception as exc:
-                logger.exception("Passport konfiguratsiyasida kutilmagan xatolik")
+                logger.exception("Authly konfiguratsiyasida kutilmagan xatolik")
                 return _error(
-                    "Passport konfiguratsiyasida ichki xatolik yuz berdi.",
+                    "Authly konfiguratsiyasida ichki xatolik yuz berdi.",
                     http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
             try:
                 user_data = client.get_user_profile(access_token)
-            except PassportSDKError as exc:
+            except AuthlySDKError as exc:
                 return _error(
                     str(exc),
                     details=getattr(exc, "details", None),
                     http_status=status.HTTP_400_BAD_REQUEST,
                 )
             except Exception as exc:
-                logger.exception("Passport profilini olishda kutilmagan xatolik")
+                logger.exception("Authly profilini olishda kutilmagan xatolik")
                 return _error(
-                    "Passport serveridan profil olishda xatolik yuz berdi.",
+                    "Authly serveridan profil olishda xatolik yuz berdi.",
                     http_status=status.HTTP_502_BAD_GATEWAY,
                 )
 

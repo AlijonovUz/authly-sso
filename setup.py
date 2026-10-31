@@ -5,14 +5,14 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
-    name="raqamli-passport-sdk",
-    version="0.3.8",
-    description="Raqamli Nazorat LLC loyihalari uchun yagona SSO Passport SDK",
+    name="authly-sso",
+    version="0.4.0",
+    description="Authly SSO OAuth2 integratsiyasi uchun yagona Python / Django SDK",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Raqamli Nazorat LLC",
+    author="Authly",
     license="MIT",
-    packages=find_packages(include=["raqamli_passport", "raqamli_passport.*"]),
+    packages=find_packages(include=["authly", "authly.*"]),
     python_requires=">=3.9",
     install_requires=[
         "requests>=2.28.0",
@@ -34,5 +34,5 @@ setup(
         "Framework :: Django",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    keywords=["sso", "passport", "oauth2", "django", "drf", "raqamli-nazorat"],
+    keywords=["sso", "authly", "oauth2", "django", "drf", "authentication"],
 )
