@@ -138,15 +138,28 @@ def populate_user_fields(user, user_data: dict) -> List[str]:
             pass
 
         if is_file_field:
-            if isinstance(avatar, str) and (
-                avatar.startswith("http://") or avatar.startswith("https://")
+            avatar_url = avatar.strip() if isinstance(avatar, str) else ""
+            if avatar_url and not (
+                avatar_url.startswith("http://") or avatar_url.startswith("https://")
+            ):
+                base_url = getattr(settings, "AUTHLY_BACKEND_URL", "")
+                if not base_url:
+                    try:
+                        client = get_authly_client()
+                        base_url = client.base_url
+                    except Exception:
+                        base_url = "https://api.authly.uz"
+                avatar_url = f"{base_url.rstrip('/')}/{avatar_url.lstrip('/')}"
+
+            if avatar_url and (
+                avatar_url.startswith("http://") or avatar_url.startswith("https://")
             ):
                 try:
-                    res = requests.get(avatar, timeout=5)
+                    res = requests.get(avatar_url, timeout=5)
                     if res.status_code == 200:
                         from django.core.files.base import ContentFile
 
-                        path = urlparse(avatar).path
+                        path = urlparse(avatar_url).path
                         ext = os.path.splitext(path)[1] or ".jpg"
                         filename = f"authly_{authly_id or user.pk or 'avatar'}{ext}"
                         getattr(user, avatar_field_name).save(

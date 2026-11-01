@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="authly-sso",
-    version="0.4.0",
+    version="0.4.1",
     description="Authly SSO OAuth2 integratsiyasi uchun yagona Python / Django SDK",
     long_description=long_description,
     long_description_content_type="text/markdown",
